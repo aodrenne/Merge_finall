@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <title>Fréquentations par site</title>
+  <title>Fréquentations par site et par zone</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@1.4.0"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
@@ -21,7 +21,8 @@
     }
 
     h2 {
-      margin-bottom: 40px;
+      margin-top: 40px;
+      margin-bottom: 20px;
     }
 
     h3 {
@@ -53,239 +54,303 @@
 
     canvas {
       display: block;
-      margin: 0 auto;
+      margin: 0 auto 40px;
       background-color: #fff;
       border-radius: 8px;
+      padding: 20px;
     }
   </style>
 </head>
 <body>
-  <h2>Fréquentations par site</h2>
 
-  <p>
-    <label for="csvFile">Importer le fichier "merge_final.csv" </label>
-    <input type="file" id="csvFile" accept=".csv" />
-  </p>
+<!-- -------- PARTIE PAR SITE -------- -->
+<h2>Fréquentations par site</h2>
 
-  <p>
-    <input type="checkbox" id="hourFilter" />
-    <label for="hourFilter">Prendre en compte seulement les heures comprises entre 8h à 20h</label>
-  </p>
+<p>
+  <label for="csvFileSite">Importer le fichier "merge_final.csv" :</label>
+  <input type="file" id="csvFileSite" accept=".csv" />
+</p>
 
-  <p>
-    <label for="siteSelect">Choisir un site :</label>
-    <select id="siteSelect" disabled></select>
-  </p>
+<p>
+  <input type="checkbox" id="hourFilter" />
+  <label for="hourFilter">Prendre en compte seulement les heures comprises entre 8h à 20h</label>
+</p>
 
-  <h3>Fréquentation totale annuelle</h3>
-  <canvas id="sumChart" width="800" height="300"></canvas>
+<p>
+  <label for="siteSelect">Choisir un site :</label>
+  <select id="siteSelect" disabled></select>
+</p>
 
-  <div class="avg-mode-wrapper">
-    <label for="avgMode">Moyenne annuelle :</label>
-    <select id="avgMode">
-      <option value="365">quotidienne</option>
-      <option value="12">mensuelle</option>
-    </select>
-  </div>
+<h3>Fréquentation totale annuelle</h3>
+<canvas id="sumChart" width="800" height="300"></canvas>
 
-  <h3>Fréquentation moyenne annuelle</h3>
-  <canvas id="avgChart" width="800" height="300"></canvas>
+<div class="avg-mode-wrapper">
+  <label for="avgMode">Moyenne annuelle :</label>
+  <select id="avgMode">
+    <option value="365">quotidienne</option>
+    <option value="12">mensuelle</option>
+  </select>
+</div>
 
-  <h3>Fréquentation totale mensuelle</h3>
-  <canvas id="monthlySumChart" width="800" height="300"></canvas>
+<h3>Fréquentation moyenne annuelle</h3>
+<canvas id="avgChart" width="800" height="300"></canvas>
 
-  <h3>Fréquentation moyenne mensuelle</h3>
-  <canvas id="monthlyAvgChart" width="800" height="300"></canvas>
+<h3>Fréquentation totale mensuelle</h3>
+<canvas id="monthlySumChart" width="800" height="300"></canvas>
 
-  <script>
-    let sumChartInstance = null;
-    let avgChartInstance = null;
-    let monthlySumInstance = null;
-    let monthlyAvgInstance = null;
-    let fullDataBySite = {};
+<h3>Fréquentation moyenne mensuelle</h3>
+<canvas id="monthlyAvgChart" width="800" height="300"></canvas>
 
-    function movingAverage(data, windowSize = 3) {
-      const result = [];
-      for (let i = 0; i < data.length; i++) {
-        const start = Math.max(0, i - Math.floor(windowSize / 2));
-        const end = Math.min(data.length, i + Math.ceil(windowSize / 2));
-        const window = data.slice(start, end);
-        const avg = window.reduce((a, b) => a + b, 0) / window.length;
-        result.push(avg);
+
+<!-- -------- PARTIE PAR ZONE -------- -->
+<h2>Fréquentations In par zone</h2>
+
+<p>
+  <label for="csvFileZone">Importer le CSV :</label>
+  <input type="file" id="csvFileZone" accept=".csv">
+</p>
+
+<p>
+  <label for="zoneSelect">Choisir une zone :</label>
+  <select id="zoneSelect" disabled></select>
+</p>
+
+<canvas id="yearChart" width="900" height="400"></canvas>
+<canvas id="monthChart" width="900" height="400" style="display:none;"></canvas>
+
+<script>
+/* === PAR SITE === */
+let sumChartInstance = null;
+let avgChartInstance = null;
+let monthlySumInstance = null;
+let monthlyAvgInstance = null;
+let fullDataBySite = {};
+
+function movingAverage(data, windowSize = 3) {
+  const result = [];
+  for (let i = 0; i < data.length; i++) {
+    const start = Math.max(0, i - Math.floor(windowSize / 2));
+    const end = Math.min(data.length, i + Math.ceil(windowSize / 2));
+    const window = data.slice(start, end);
+    const avg = window.reduce((a, b) => a + b, 0) / window.length;
+    result.push(avg);
+  }
+  return result;
+}
+
+function updateCharts(siteName) {
+  const entries = fullDataBySite[siteName];
+  const yearlyGrouped = {};
+  entries.forEach(e => {
+    if (!yearlyGrouped[e.year]) yearlyGrouped[e.year] = [];
+    yearlyGrouped[e.year].push(e.in);
+  });
+
+  const years = Object.keys(yearlyGrouped).sort();
+  const yearlySums = years.map(y => yearlyGrouped[y].reduce((a, b) => a + b, 0));
+  const avgMode = parseInt(document.getElementById("avgMode").value);
+  const yearlyAvgs = yearlySums.map(total => total / avgMode);
+
+  const monthlyGrouped = {};
+  entries.forEach(e => {
+    if (!monthlyGrouped[e.month]) monthlyGrouped[e.month] = [];
+    monthlyGrouped[e.month].push(e.in);
+  });
+
+  const monthLabels = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"];
+  const monthlySums = monthLabels.map((_, i) => {
+    const m = String(i + 1).padStart(2, '0');
+    const arr = monthlyGrouped[m] || [];
+    return arr.reduce((a, b) => a + b, 0);
+  });
+  const monthlyAvgs = monthlySums.map(v => v / 365);
+
+  const yearlyAvgMean = yearlyAvgs.reduce((a, b) => a + b, 0) / yearlyAvgs.length;
+  const monthlyAvgMean = monthlyAvgs.reduce((a, b) => a + b, 0) / monthlyAvgs.length;
+
+  const createChart = (ctx, labels, barData, avgValue, trendData, barColor, avgLabel, title, yLabel) => {
+    return new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: barData.label, data: barData.data.map(v => Math.round(v)), backgroundColor: barColor, order: 2 },
+          { label: 'Moyenne', data: Array(labels.length).fill(Math.round(avgValue)), type: 'line', borderColor: 'green', borderWidth: 2, borderDash: [5, 5], fill: false, tension: 0, order: 1, pointRadius: 0 },
+          { label: 'Tendance', data: trendData.map(v => Math.round(v)), type: 'line', borderColor: 'red', borderWidth: 2, fill: false, tension: 0.4, order: 1, pointRadius: 0 }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { title: { display: true, text: title } },
+        scales: { x: { title: { display: true, text: labels === monthLabels ? 'Mois' : 'Année' } }, y: { beginAtZero: true, title: { display: true, text: yLabel } } }
       }
-      return result;
-    }
-
-    function updateCharts(siteName) {
-      const entries = fullDataBySite[siteName];
-      const yearlyGrouped = {};
-      entries.forEach(e => {
-        if (!yearlyGrouped[e.year]) yearlyGrouped[e.year] = [];
-        yearlyGrouped[e.year].push(e.in);
-      });
-
-      const years = Object.keys(yearlyGrouped).sort();
-      const yearlySums = years.map(y => yearlyGrouped[y].reduce((a, b) => a + b, 0));
-      const avgMode = parseInt(document.getElementById("avgMode").value);
-      const yearlyAvgs = yearlySums.map(total => total / avgMode);
-
-      const monthlyGrouped = {};
-      entries.forEach(e => {
-        if (!monthlyGrouped[e.month]) monthlyGrouped[e.month] = [];
-        monthlyGrouped[e.month].push(e.in);
-      });
-
-      const monthLabels = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"];
-      const monthlySums = monthLabels.map((_, i) => {
-        const m = String(i + 1).padStart(2, '0');
-        const arr = monthlyGrouped[m] || [];
-        return arr.reduce((a, b) => a + b, 0);
-      });
-      const monthlyAvgs = monthlySums.map(v => v / 365);
-
-      const yearlyAvgMean = yearlyAvgs.reduce((a, b) => a + b, 0) / yearlyAvgs.length;
-      const monthlyAvgMean = monthlyAvgs.reduce((a, b) => a + b, 0) / monthlyAvgs.length;
-
-      const createChart = (ctx, labels, barData, avgValue, trendData, barColor, avgLabel, title, yLabel) => {
-        return new Chart(ctx, {
-          type: 'bar',
-          data: {
-            labels: labels,
-            datasets: [
-              {
-                label: barData.label,
-                data: barData.data.map(v => Math.round(v)),
-                backgroundColor: barColor,
-                order: 2
-              },
-              {
-                label: 'Moyenne',
-                data: Array(labels.length).fill(Math.round(avgValue)),
-                type: 'line',
-                borderColor: 'green',
-                borderWidth: 2,
-                borderDash: [5, 5],
-                fill: false,
-                tension: 0,
-                order: 1,
-                pointRadius: 0,
-                pointHoverRadius: 0
-              },
-              {
-                label: 'Tendance',
-                data: trendData.map(v => Math.round(v)),
-                type: 'line',
-                borderColor: 'red',
-                borderWidth: 2,
-                fill: false,
-                tension: 0.4,
-                order: 1,
-                pointRadius: 0,
-                pointHoverRadius: 0
-              }
-            ]
-          },
-          options: {
-            responsive: true,
-            plugins: {
-              title: { display: true, text: title }
-            },
-            scales: {
-              x: { title: { display: true, text: labels === monthLabels ? 'Mois' : 'Année' } },
-              y: { beginAtZero: true, title: { display: true, text: yLabel } }
-            }
-          }
-        });
-      };
-
-      if (sumChartInstance) sumChartInstance.destroy();
-      sumChartInstance = createChart(document.getElementById("sumChart").getContext("2d"), years, {
-        label: `Total – ${siteName}`,
-        data: yearlySums
-      }, yearlySums.reduce((a, b) => a + b, 0) / yearlySums.length, movingAverage(yearlySums), '#4e79a7', 'Moyenne annuelle', `Totaux annuels – ${siteName}`, 'Total In');
-
-      if (avgChartInstance) avgChartInstance.destroy();
-      avgChartInstance = createChart(document.getElementById("avgChart").getContext("2d"), years, {
-        label: `Moyenne – ${siteName}`,
-        data: yearlyAvgs
-      }, yearlyAvgMean, movingAverage(yearlyAvgs), '#f28e2b', 'Moyenne annuelle', `Moyenne des fréquentations annuelles – ${siteName}`, 'Moyenne In');
-
-      if (monthlySumInstance) monthlySumInstance.destroy();
-      monthlySumInstance = createChart(document.getElementById("monthlySumChart").getContext("2d"), monthLabels, {
-        label: `Total – ${siteName}`,
-        data: monthlySums
-      }, monthlySums.reduce((a, b) => a + b, 0) / monthlySums.length, movingAverage(monthlySums), '#59a14f', 'Moyenne mensuelle', `Total des fréquentations par mois – ${siteName}`, 'Total In');
-
-      if (monthlyAvgInstance) monthlyAvgInstance.destroy();
-      monthlyAvgInstance = createChart(document.getElementById("monthlyAvgChart").getContext("2d"), monthLabels, {
-        label: `Moyenne – ${siteName}`,
-        data: monthlyAvgs
-      }, monthlyAvgMean, movingAverage(monthlyAvgs), '#edc949', 'Moyenne mensuelle', `Moyenne des fréquentations par mois – ${siteName}`, 'Moyenne In');
-    }
-
-    document.getElementById("csvFile").addEventListener("change", function (e) {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      Papa.parse(file, {
-        header: true,
-        skipEmptyLines: true,
-        complete: function (results) {
-          const rows = results.data;
-          fullDataBySite = {};
-
-          const hourFilterEnabled = document.getElementById("hourFilter").checked;
-
-          rows.forEach(row => {
-            const site = row["Site"];
-            const dateStr = row["Date"];
-            const inVal = parseInt(row["In"]);
-
-            if (!site || !dateStr || isNaN(inVal)) return;
-
-            const parts = dateStr.split(" ");
-            const [day, month, year] = parts[0].split("/");
-            if (!year || !month) return;
-
-            let hour = 12;
-            if (parts[1]) {
-              const [h] = parts[1].split(":");
-              hour = parseInt(h);
-            }
-
-            if (hourFilterEnabled && (hour < 8 || hour > 20)) return;
-
-            if (!fullDataBySite[site]) fullDataBySite[site] = [];
-            fullDataBySite[site].push({ year, month, in: inVal });
-          });
-
-          const siteSelect = document.getElementById("siteSelect");
-          siteSelect.innerHTML = '';
-          const allSites = Object.keys(fullDataBySite).sort();
-          allSites.forEach(site => {
-            const opt = document.createElement("option");
-            opt.value = site;
-            opt.textContent = site;
-            siteSelect.appendChild(opt);
-          });
-
-          siteSelect.disabled = false;
-          updateCharts(siteSelect.value);
-
-          siteSelect.addEventListener("change", () => {
-            updateCharts(siteSelect.value);
-          });
-
-          document.getElementById("hourFilter").addEventListener("change", () => {
-            document.getElementById("csvFile").dispatchEvent(new Event("change"));
-          });
-
-          document.getElementById("avgMode").addEventListener("change", () => {
-            updateCharts(siteSelect.value);
-          });
-        }
-      });
     });
-  </script>
+  };
+
+  if (sumChartInstance) sumChartInstance.destroy();
+  sumChartInstance = createChart(document.getElementById("sumChart").getContext("2d"), years, {
+    label: `Total – ${siteName}`,
+    data: yearlySums
+  }, yearlySums.reduce((a, b) => a + b, 0) / yearlySums.length, movingAverage(yearlySums), '#4e79a7', 'Moyenne annuelle', `Totaux annuels – ${siteName}`, 'Total In');
+
+  if (avgChartInstance) avgChartInstance.destroy();
+  avgChartInstance = createChart(document.getElementById("avgChart").getContext("2d"), years, {
+    label: `Moyenne – ${siteName}`,
+    data: yearlyAvgs
+  }, yearlyAvgMean, movingAverage(yearlyAvgs), '#f28e2b', 'Moyenne annuelle', `Moyenne des fréquentations annuelles – ${siteName}`, 'Moyenne In');
+
+  if (monthlySumInstance) monthlySumInstance.destroy();
+  monthlySumInstance = createChart(document.getElementById("monthlySumChart").getContext("2d"), monthLabels, {
+    label: `Total – ${siteName}`,
+    data: monthlySums
+  }, monthlySums.reduce((a, b) => a + b, 0) / monthlySums.length, movingAverage(monthlySums), '#59a14f', 'Moyenne mensuelle', `Total des fréquentations par mois – ${siteName}`, 'Total In');
+
+  if (monthlyAvgInstance) monthlyAvgInstance.destroy();
+  monthlyAvgInstance = createChart(document.getElementById("monthlyAvgChart").getContext("2d"), monthLabels, {
+    label: `Moyenne – ${siteName}`,
+    data: monthlyAvgs
+  }, monthlyAvgMean, movingAverage(monthlyAvgs), '#edc949', 'Moyenne mensuelle', `Moyenne des fréquentations par mois – ${siteName}`, 'Moyenne In');
+}
+
+document.getElementById("csvFileSite").addEventListener("change", function (e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  Papa.parse(file, {
+    header: true,
+    skipEmptyLines: true,
+    complete: function (results) {
+      const rows = results.data;
+      fullDataBySite = {};
+      const hourFilterEnabled = document.getElementById("hourFilter").checked;
+
+      rows.forEach(row => {
+        const site = row["Site"];
+        const dateStr = row["Date"];
+        const inVal = parseInt(row["In"]);
+        if (!site || !dateStr || isNaN(inVal)) return;
+
+        const parts = dateStr.split(" ");
+        const [day, month, year] = parts[0].split("/");
+        if (!year || !month) return;
+
+        let hour = parts[1] ? parseInt(parts[1].split(":")[0]) : 12;
+        if (hourFilterEnabled && (hour < 8 || hour > 20)) return;
+
+        fullDataBySite[site] ??= [];
+        fullDataBySite[site].push({ year, month, in: inVal });
+      });
+
+      const siteSelect = document.getElementById("siteSelect");
+      siteSelect.innerHTML = '';
+      Object.keys(fullDataBySite).sort().forEach(site => {
+        const opt = document.createElement("option");
+        opt.value = site;
+        opt.textContent = site;
+        siteSelect.appendChild(opt);
+      });
+
+      siteSelect.disabled = false;
+      updateCharts(siteSelect.value);
+
+      siteSelect.addEventListener("change", () => updateCharts(siteSelect.value));
+      document.getElementById("hourFilter").addEventListener("change", () => document.getElementById("csvFileSite").dispatchEvent(new Event("change")));
+      document.getElementById("avgMode").addEventListener("change", () => updateCharts(siteSelect.value));
+    }
+  });
+});
+
+/* === PAR ZONE === */
+let dataByZone = {};
+let yearChart = null;
+let monthChart = null;
+
+const monthLabels = ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sep','Oct','Nov','Déc'];
+
+function parseDateLocal(str){
+  const [datePart] = str.trim().split(/\s+/);           // “01/07/2022” ou “2022‑07‑01”
+  const parts = datePart.includes('/') ? datePart.split('/') : datePart.split('-');
+
+  let day, month, year;
+  if (parts[0].length === 4) {        // yyyy-mm-dd
+    [year, month, day] = parts;
+  } else {                            // dd/mm/yyyy   ou  dd-mm-yyyy
+    [day, month, year] = parts;
+  }
+  return { year, month: month.padStart(2,'0') };
+}
+
+
+function buildZoneMenu(){
+  const sel = document.getElementById('zoneSelect');
+  sel.innerHTML = '';
+  Object.keys(dataByZone).sort().forEach(z => sel.appendChild(new Option(z, z)));
+  sel.disabled = false;
+  sel.onchange = () => drawYearChart(sel.value);
+  drawYearChart(sel.value);
+}
+
+function drawYearChart(zone){
+  const yearlyObj = dataByZone[zone] || {};
+  const years = Object.keys(yearlyObj).sort();
+  const totals = years.map(y => Object.values(yearlyObj[y] || {}).reduce((a, b) => a + b, 0));
+
+  if (yearChart) yearChart.destroy();
+  yearChart = new Chart(document.getElementById('yearChart').getContext('2d'), {
+    type: 'bar',
+    data: { labels: years, datasets: [{ label: `In total – ${zone}`, data: totals, backgroundColor:'#4e79a7' }] },
+    options: {
+      responsive: false,
+      plugins: { title: { display: true, text: `Total In par année – ${zone}` } },
+      onClick: (evt, elms) => {
+        if (elms.length) {
+          const idx = elms[0].index;
+          drawMonthChart(zone, years[idx]);
+        }
+      }
+    }
+  });
+  document.getElementById('monthChart').style.display = 'none';
+}
+
+function drawMonthChart(zone, year){
+  const monthsObj = (dataByZone[zone] && dataByZone[zone][year]) || {};
+  const totals = monthLabels.map((_, i) => monthsObj[String(i+1).padStart(2,'0')] || 0);
+
+  if (monthChart) monthChart.destroy();
+  document.getElementById('monthChart').style.display = 'block';
+  monthChart = new Chart(document.getElementById('monthChart').getContext('2d'), {
+    type: 'bar',
+    data: { labels: monthLabels, datasets: [{ label: `In total – ${zone} (${year})`, data: totals, backgroundColor:'#f28e2b' }] },
+    options: { responsive: false, plugins: { title: { display: true, text: `Total In par mois – ${zone} (${year})` } } }
+
+  });
+}
+
+document.getElementById('csvFileZone').addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if (!file) return;
+  Papa.parse(file, {
+    header: true,
+    skipEmptyLines: true,
+    complete: ({ data }) => {
+      dataByZone = {};
+      data.forEach(row => {
+        const zone = row.Zone?.trim();
+        const dateStr = row.Date || '';
+        const inVal = parseInt(row.In);
+        if (!zone || !dateStr || isNaN(inVal)) return;
+
+        const { year, month } = parseDateLocal(dateStr);
+        dataByZone[zone] ??= {};
+        dataByZone[zone][year] ??= {};
+        dataByZone[zone][year][month] = (dataByZone[zone][year][month] || 0) + inVal;
+      });
+      buildZoneMenu();
+    }
+  });
+});
+
+</script>
 </body>
 </html>
